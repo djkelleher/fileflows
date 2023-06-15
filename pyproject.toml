@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "file-flows"
+version = "0.1.0"
+description = "High-level file operations."
+authors = ["Dan Kelleher <kelleherjdan@gmail.com>"]
+readme = "README.md"
+packages = [{include = "file_flows"}]
+repository = "https://github.com/danklabs-dev/file-flows"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+
+ready-logger = "^1.0.0"
+tqdm = "^4.65.0"
+pydantic = "^1.10.7"
+polars = {extras = ["all"], version = "^0.17.2"}
+pyarrow = "^11.0.0"
+s3fs = {extras = ["boto3"], version = "^2023.4.0"}
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
