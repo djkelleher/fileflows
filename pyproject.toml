@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "file-flows"
-version = "0.1.0"
+version = "0.1.1"
 description = "High-level file operations."
 authors = ["Dan Kelleher <kelleherjdan@gmail.com>"]
 readme = "README.md"
