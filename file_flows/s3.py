@@ -129,6 +129,10 @@ class S3Ops:
             if_exists (bool, optional): Do not raise exception if file does not exist. Defaults to False.
         """
         bucket_name, partition = self.bucket_and_partition(file)
+        if not partition:
+            if if_exists:
+                return
+            raise FileNotFoundError(f"File does not exist: {file}")
         try:
             self.client.delete_object(
                 Bucket=bucket_name,
@@ -175,8 +179,12 @@ class S3Ops:
             dst_path (str): Destination file or partition.
             delete_src (bool): Remove the content at src_path after transferring.
         """
-        src_bucket_name, src_partition = self.bucket_and_partition(src_path)
-        dst_bucket_name, dst_partition = self.bucket_and_partition(dst_path)
+        src_bucket_name, src_partition = self.bucket_and_partition(
+            src_path, require_partition=False
+        )
+        dst_bucket_name, dst_partition = self.bucket_and_partition(
+            dst_path, require_partition=False
+        )
         src_files = self.list_files(src_bucket_name, src_partition, return_as="paths")
         src_partition_is_file = file_extensions_re.search(src_partition)
         dst_partition_is_file = file_extensions_re.search(dst_partition)
@@ -214,9 +222,19 @@ class S3Ops:
 
     def exists(self, file: str) -> bool:
         """Check if a file exists in s3."""
-        bucket, partition = self.bucket_and_partition(file)
+        bucket, partition = self.bucket_and_partition(file, require_partition=False)
+        if not partition:
+            # check if bucket exists.
+            try:
+                self.client.head_bucket(Bucket=bucket)
+                return True
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "404":
+                    # The bucket does not exist.
+                    return False
+                raise
         try:
-            self.resource.Object(bucket, partition).load()
+            self.client.head_object(Bucket=bucket, Key=partition)
             return True
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
@@ -321,11 +339,17 @@ class S3Ops:
             return df.to_pandas()
         return df
 
-    def bucket_and_partition(self, path: str) -> Union[None, Tuple[str, str]]:
+    def bucket_and_partition(
+        self, path: str, require_partition: bool = True
+    ) -> Union[None, Tuple[str, str]]:
         """Split a s3 path into bucket and partition."""
         if match := self._bucket_and_partition_re.search(path):
             # bucket name, partition
-            return match.group(1), match.group(2)
+            bucket = match.group(1)
+            partition = match.group(2)
+            if require_partition and not partition:
+                raise ValueError(f"Path {path} does not contain a partition: {path}")
+            return bucket, partition
 
     @cached_property
     def arrow_fs(self) -> S3FileSystem:

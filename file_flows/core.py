@@ -17,11 +17,13 @@ class FileOps:
         self._s3_cfg = s3_cfg
 
     def create(self, location: Union[str, Path]):
-        """Create a direcotry or bucket if it donsn't already exist."""
+        """Create a directory or bucket if it doesn't already exist."""
         # make sure primary save location exists.
         if self.s3.is_s3_path(location):
             # make sure bucket exists.
-            bucket_name, _ = self.s3.bucket_and_partition(location)
+            bucket_name, _ = self.s3.bucket_and_partition(
+                location, require_partition=False
+            )
             self.s3.get_bucket(bucket_name)
         else:
             # make sure directory exists.
@@ -41,6 +43,8 @@ class FileOps:
                     src_path=src_path, dst_path=dst_path, delete_src=delete_src
                 )
             else:
+                if Path(dst_path).is_dir():
+                    dst_path = f"{dst_path}/{Path(src_path).name}"
                 self.s3.download_file(
                     s3_path=src_path,
                     local_path=dst_path,
@@ -49,8 +53,12 @@ class FileOps:
 
         elif self.s3.is_s3_path(dst_path):
             # upload local file to s3.
-            bucket_name, file_path = self.s3.bucket_and_partition(dst_path)
-            self.s3.client.upload_file(str(src_path), bucket_name, file_path)
+            bucket_name, partition = self.s3.bucket_and_partition(
+                dst_path, require_partition=False
+            )
+            if not partition:
+                partition = str(src_path).split(f"{bucket_name}/")[-1].lstrip("/")
+            self.s3.client.upload_file(str(src_path), bucket_name, partition)
         else:
             shutil.copy(src_path, dst_path)
         if delete_src:
