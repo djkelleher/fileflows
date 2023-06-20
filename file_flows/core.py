@@ -43,7 +43,7 @@ class FileOps:
                     src_path=src_path, dst_path=dst_path, delete_src=delete_src
                 )
             else:
-                if Path(dst_path).is_dir():
+                if os.path.isdir(dst_path):
                     dst_path = f"{dst_path}/{Path(src_path).name}"
                 self.s3.download_file(
                     s3_path=src_path,
@@ -86,7 +86,7 @@ class FileOps:
         """Returns True if file exists."""
         if self.s3.is_s3_path(file):
             return self.s3.exists(file)
-        return Path(file).exists()
+        return os.path.exists(file)
 
     def file_size(self, file: Union[str, Path]) -> int:
         """Returns file size in bytes."""
