@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "file-flows"
 version = "0.1.1"
-description = "High-level file operations."
+description = "A single high-level file operations API for both object stores and local file system."
 authors = ["Dan Kelleher <kelleherjdan@gmail.com>"]
 readme = "README.md"
 packages = [{include = "file_flows"}]
