@@ -11,7 +11,8 @@ import polars as pl
 from boto3.session import Config
 from botocore.exceptions import ClientError
 from pyarrow.fs import S3FileSystem
-from pydantic import AnyHttpUrl, BaseSettings, SecretStr
+from pydantic import AnyHttpUrl, SecretStr
+from pydantic_settings import BaseSettings
 from tqdm import tqdm
 
 from .extensions import file_extensions_re
