@@ -1,6 +1,6 @@
 [project]
 name = "file-flows"
-version = "0.1.4"
+version = "0.1.5"
 description = "A single high-level file operations API for both object stores and local file system."
 authors = [{ name = "Dan Kelleher", email = "kelleherjdan@gmail.com" }]
 license = { text = "MIT" }

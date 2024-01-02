@@ -362,7 +362,7 @@ class S3Ops:
             return bucket, partition
 
     @cached_property
-    def arrow_fs(self) -> S3FileSystem:
+    def arrow_fs(self) -> "S3FileSystem":
         return S3FileSystem(
             access_key=self.s3_params.aws_access_key_id,
             secret_key=self.s3_params.aws_secret_access_key.get_secret_value(),
