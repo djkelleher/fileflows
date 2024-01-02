@@ -4,10 +4,17 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Union
 
-import polars as pl
-from pyarrow import parquet
-
 from .s3 import S3Cfg, S3Ops
+
+try:
+    import polars as pl
+except ImportError:
+    pass
+
+try:
+    from pyarrow import parquet
+except ImportError:
+    pass
 
 
 class FileOps:

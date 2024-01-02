@@ -7,15 +7,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import boto3
-import polars as pl
 from boto3.session import Config
 from botocore.exceptions import ClientError
-from pyarrow.fs import S3FileSystem
 from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
 
 from .extensions import file_extensions_re
+
+try:
+    import polars as pl
+except ImportError:
+    pass
+
+try:
+    from pyarrow.fs import S3FileSystem
+except ImportError:
+    pass
+
 
 PathT = Union[str, Path]
 

@@ -1,11 +1,10 @@
-[tool.poetry]
+[project]
 name = "file-flows"
-version = "0.1.3"
+version = "0.1.4"
 description = "A single high-level file operations API for both object stores and local file system."
-authors = ["Dan Kelleher <kelleherjdan@gmail.com>"]
+authors = [{ name = "Dan Kelleher", email = "kelleherjdan@gmail.com" }]
+license = { text = "MIT" }
 readme = "README.md"
-packages = [{ include = "file_flows" }]
-repository = "https://github.com/djkelleher/file-flows"
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -14,19 +13,15 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.8.1"
+dependencies = ["tqdm", "s3fs[boto3]", "pydantic>=2.0.0", "pydantic-settings"]
 
-tqdm = "^4.65.0"
-polars = { extras = ["all"], version = "^0.17.2" }
-pyarrow = "^11.0.0"
-s3fs = { extras = ["boto3"], version = "^2023.4.0" }
-pydantic = "^2.3.0"
-pydantic-settings = "^2.0.3"
+[project.optional-dependencies]
+dataframes = ["polars[all]", "pyarrow"]
+dev = ["black", "pytest"]
 
-[tool.poetry.group.dev.dependencies]
-black = "^23.3.0"
+[tool.setuptools]
+packages = ["file_flows"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=43.0.0", "setuptools-scm", "wheel"]
+build-backend = "setuptools.build_meta"
