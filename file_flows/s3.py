@@ -366,7 +366,7 @@ class S3Ops:
         return S3FileSystem(
             access_key=self.s3_params.aws_access_key_id,
             secret_key=self.s3_params.aws_secret_access_key.get_secret_value(),
-            endpoint_override=self.s3_params.s3_endpoint_url,
+            endpoint_override=self.s3_params.s3_endpoint_url.unicode_string(),
         )
 
     @cached_property
@@ -374,7 +374,9 @@ class S3Ops:
         return {
             "key": self.s3_params.aws_access_key_id,
             "secret": self.s3_params.aws_secret_access_key.get_secret_value(),
-            "client_kwargs": {"endpoint_url": self.s3_params.s3_endpoint_url},
+            "client_kwargs": {
+                "endpoint_url": self.s3_params.s3_endpoint_url.unicode_string()
+            },
         }
 
     @cached_property
@@ -388,7 +390,7 @@ class S3Ops:
     def _boto3_obj(self, obj_type: Literal["resource", "client"]):
         return getattr(boto3, obj_type)(
             "s3",
-            endpoint_url=self.s3_params.s3_endpoint_url,
+            endpoint_url=self.s3_params.s3_endpoint_url.unicode_string(),
             aws_access_key_id=self.s3_params.aws_access_key_id,
             aws_secret_access_key=self.s3_params.aws_secret_access_key.get_secret_value(),
             config=Config(signature_version="s3v4"),
