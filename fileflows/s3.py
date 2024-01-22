@@ -13,7 +13,7 @@ from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
 
-from .extensions import file_extensions_re
+from .utils import file_extensions_re
 
 try:
     import polars as pl
@@ -37,17 +37,18 @@ class S3Cfg(BaseSettings):
     aws_secret_access_key: SecretStr
 
 
-class S3Ops:
+def is_s3_path(path: PathT) -> bool:
+    """Returns True if `path` is an s3 path."""
+    return str(path).startswith("s3://")
+
+
+class S3:
     """File operations for s3 protocol object stores."""
 
     _bucket_and_partition_re = re.compile(r"s3:\/\/([-\w]+)(?:\/(.+))?")
 
     def __init__(self, s3_cfg: Optional[S3Cfg] = None) -> None:
         self.s3_params = s3_cfg or S3Cfg()
-
-    def is_s3_path(self, path: PathT) -> bool:
-        """Returns True if `path` is an s3 path."""
-        return str(path).startswith("s3://")
 
     def upload(
         self,
@@ -178,7 +179,7 @@ class S3Ops:
                 else:
                     raise err
 
-    def transfer_s3_location(self, src_path: str, dst_path: str, delete_src: bool):
+    def move(self, src_path: str, dst_path: str, delete_src: bool):
         """Move files in s3 to another location in s3.
             - move a file to new partition,
             - move a file to a new file,

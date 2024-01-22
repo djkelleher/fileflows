@@ -1,6 +1,6 @@
 [project]
-name = "file-flows"
-version = "0.1.6"
+name = "fileflows"
+version = "0.2.6"
 description = "A single high-level file operations API for both object stores and local file system."
 authors = [{ name = "Dan Kelleher", email = "kelleherjdan@gmail.com" }]
 license = { text = "MIT" }
@@ -20,7 +20,7 @@ dataframes = ["polars[all]", "pyarrow"]
 dev = ["black", "pytest"]
 
 [tool.setuptools]
-packages = ["file_flows"]
+packages = ["fileflows"]
 
 [build-system]
 requires = ["setuptools>=43.0.0", "setuptools-scm", "wheel"]
