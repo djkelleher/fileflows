@@ -197,6 +197,7 @@ class S3:
             dst_path, require_partition=False
         )
         src_files = self.list_files(src_bucket_name, src_partition, return_as="paths")
+        # TODO check by number of / instead of file extensions?
         src_partition_is_file = file_extensions_re.search(src_partition)
         dst_partition_is_file = file_extensions_re.search(dst_partition)
 
@@ -339,6 +340,10 @@ class S3:
             return df.to_pandas()
         return df
 
+    def df_to_csv(self, df, path: str, **kwargs):
+        kwargs["storage_options"] = self.storage_options
+        df.to_csv(path, index=False, **kwargs)
+
     def df_from_parquet(
         self,
         path: str,
@@ -349,6 +354,10 @@ class S3:
         if return_as == "pandas":
             return df.to_pandas()
         return df
+
+    def df_to_parquet(self, df, path: str, **kwargs):
+        kwargs["storage_options"] = self.storage_options
+        df.to_parquet(path, index=False, **kwargs)
 
     def bucket_and_partition(
         self, path: str, require_partition: bool = True
