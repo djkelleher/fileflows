@@ -13,7 +13,7 @@ from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
 
-from .utils import file_extensions_re
+from .utils import file_extensions_re, logger
 
 try:
     import polars as pl
@@ -64,12 +64,13 @@ class S3:
             partition_relative_to (Optional[str], optional): Use part of `file` path relative to `partition_relative_to` as s3 partition. If literal "bucket_name", path relative to `bucket_name` arg will be used. Defaults to None.
         """
         files = [files] if isinstance(files, str) else files
-        for file in files:
+        for file in tqdm(files):
             partition = (
                 str(file).split(partition_relative_to)[-1].lstrip("/")
                 if partition_relative_to
                 else file
             )
+            logger.info("Uploading %s to s3://%s/%s", file, bucket_name, partition)
             self.client.upload_file(str(file), bucket_name, partition)
 
     def read_file(self, path: str) -> BytesIO:
@@ -108,6 +109,7 @@ class S3:
         local_path.parent.mkdir(exist_ok=True, parents=True)
 
         if overwrite or not local_path.exists():
+            logger.info("Downloading %s to %s", s3_path, local_path)
             bucket, partition = self.bucket_and_partition(s3_path)
             with local_path.open(mode="wb+") as f:
                 self.client.download_fileobj(bucket, partition, f)
@@ -181,10 +183,9 @@ class S3:
 
     def move(self, src_path: str, dst_path: str, delete_src: bool):
         """Move files in s3 to another location in s3.
-            - move a file to new partition,
-            - move a file to a new file,
-            - move a partition to a new partition,
-
+            - move a file to new partition
+            - move a file to a new file
+            - move a partition to a new partition
         Args:
             src_path (str): Source file or partition.
             dst_path (str): Destination file or partition.
@@ -197,12 +198,9 @@ class S3:
             dst_path, require_partition=False
         )
         src_files = self.list_files(src_bucket_name, src_partition, return_as="paths")
-        # TODO check by number of / instead of file extensions?
-        src_partition_is_file = file_extensions_re.search(src_partition)
-        dst_partition_is_file = file_extensions_re.search(dst_partition)
-
+        src_partition_is_file = self.is_file_path(src_path)
+        dst_partition_is_file = self.is_file_path(dst_path)
         dst_bucket = self.resource.Bucket(dst_bucket_name)
-
         if src_partition_is_file:
             assert len(src_files) == 1
             src_file = src_files[0]
@@ -211,6 +209,7 @@ class S3:
                 dst_path = f"{dst_partition}/{src_file.split('/')[-1]}"
             else:
                 dst_path = dst_path.split(f"{dst_bucket_name}/")[-1]
+            logger.info("Moving %s to %s", src_file, dst_path)
             # copy src file to dst file.
             dst_bucket.Object(dst_path).copy(
                 {"Bucket": src_bucket_name, "Key": src_file}
@@ -223,10 +222,12 @@ class S3:
             # loop over all files in source partition.
             for src_file in tqdm(src_files):
                 dst_path = f"{dst_partition}/{src_file.split('/')[-1]}"
+                logger.info("Moving %s to %s", src_file, dst_path)
                 dst_bucket.Object(dst_path).copy(
                     {"Bucket": src_bucket_name, "Key": src_file}
                 )
         if delete_src:
+            logger.info("Deleting %s/%s", src_bucket_name, src_partition)
             self.client.delete_object(
                 Bucket=src_bucket_name,
                 Key=src_partition,
@@ -259,7 +260,7 @@ class S3:
         bucket, partition = self.bucket_and_partition(file)
         return self.resource.Object(bucket, partition).content_length
 
-    def get_bucket(self, bucket_name: str):
+    def get_bucket(self, bucket_name: str) -> "Bucket":
         """Get a bucket object for `bucket_name`. If bucket does not exist, create it."""
         bucket_name = re.sub(r"^s3:\/\/", "", bucket_name)
         bucket = self.resource.Bucket(bucket_name)
@@ -370,6 +371,7 @@ class S3:
             if require_partition and not partition:
                 raise ValueError(f"Path {path} does not contain a partition: {path}")
             return bucket, partition
+        return None, None
 
     @cached_property
     def arrow_fs(self) -> "S3FileSystem":
@@ -396,6 +398,19 @@ class S3:
     @cached_property
     def client(self):
         return self._boto3_obj("client")
+
+    def is_file_path(self, path: str) -> bool:
+        """Return True if provided path is to a file."""
+        if file_extensions_re.search(path):
+            # path has a known file extension.
+            return True
+        bucket_name, partition = self.bucket_and_partition(path)
+        try:
+            # Check if the path is a file
+            self.client.head_object(Bucket=bucket_name, Key=partition)
+            return True
+        except self.client.exceptions.ClientError:
+            return False
 
     def _boto3_obj(self, obj_type: Literal["resource", "client"]):
         return getattr(boto3, obj_type)(

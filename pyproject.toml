@@ -1,6 +1,6 @@
 [project]
 name = "fileflows"
-version = "0.2.6"
+version = "0.2.7"
 description = "A single high-level file operations API for both object stores and local file system."
 authors = [{ name = "Dan Kelleher", email = "kelleherjdan@gmail.com" }]
 license = { text = "MIT" }
@@ -13,7 +13,13 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-dependencies = ["tqdm", "s3fs[boto3]", "pydantic>=2.0.0", "pydantic-settings"]
+dependencies = [
+    "tqdm",
+    "s3fs[boto3]",
+    "pydantic>=2.0.0",
+    "pydantic-settings",
+    "quicklogs",
+]
 
 [project.optional-dependencies]
 dataframes = ["polars[all]", "pyarrow"]
