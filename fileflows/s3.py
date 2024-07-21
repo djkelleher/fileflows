@@ -32,7 +32,7 @@ PathT = Union[str, Path]
 class S3Cfg(BaseSettings):
     """S3 configuration. Variables will be loaded from environment variables if set."""
 
-    s3_endpoint_url: AnyHttpUrl = "http://localhost:9000"
+    s3_endpoint_url: AnyHttpUrl
     aws_access_key_id: str
     aws_secret_access_key: SecretStr
 
