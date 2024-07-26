@@ -1,30 +1,19 @@
 import fnmatch
-import gzip
 import re
 from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import List, Literal, Optional, Sequence, Tuple, Union
 
 import boto3
 from boto3.session import Config
 from botocore.exceptions import ClientError
+from pyarrow.fs import S3FileSystem
 from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
 
 from .utils import file_extensions_re, logger
-
-try:
-    import polars as pl
-except ImportError:
-    pass
-
-try:
-    from pyarrow.fs import S3FileSystem
-except ImportError:
-    pass
-
 
 PathT = Union[str, Path]
 
@@ -35,6 +24,7 @@ class S3Cfg(BaseSettings):
     s3_endpoint_url: AnyHttpUrl
     aws_access_key_id: str
     aws_secret_access_key: SecretStr
+    region: Optional[str] = None
 
 
 def is_s3_path(path: PathT) -> bool:
@@ -48,7 +38,7 @@ class S3:
     _bucket_and_partition_re = re.compile(r"s3:\/\/([-\w]+)(?:\/(.+))?")
 
     def __init__(self, s3_cfg: Optional[S3Cfg] = None) -> None:
-        self.s3_params = s3_cfg or S3Cfg()
+        self.cfg = s3_cfg or S3Cfg()
 
     def upload(
         self,
@@ -142,10 +132,6 @@ class S3:
             if_exists (bool, optional): Do not raise exception if file does not exist. Defaults to False.
         """
         bucket_name, partition = self.bucket_and_partition(file)
-        if not partition:
-            if if_exists:
-                return
-            raise FileNotFoundError(f"File does not exist: {file}")
         try:
             self.client.delete_object(
                 Bucket=bucket_name,
@@ -312,54 +298,6 @@ class S3:
             return [f.split("/")[-1] for f in files]
         raise ValueError(f"Invalid return format: {return_as}")
 
-    def df_from_csv(
-        self,
-        path: str,
-        header: Union[bool, Sequence[str]],
-        dtypes: Dict[str, Any] = None,
-        return_as: Literal["pandas", "polars"] = "pandas",
-    ):
-        """Create DataFrame from CSV file in S3."""
-        has_header = header is True
-        if path.endswith(".gz"):
-            df = pl.read_csv(
-                gzip.decompress(self.read_file(path).read()),
-                has_header=has_header,
-                dtypes=dtypes,
-            )
-        else:
-            df = pl.read_csv(
-                path,
-                storage_options=self.storage_options,
-                has_header=has_header,
-                dtypes=dtypes,
-            )
-        if isinstance(header, (list, tuple)):
-            assert len(header) == len(df.columns)
-            df = df.rename(dict(zip(df.columns, header)))
-        if return_as == "pandas":
-            return df.to_pandas()
-        return df
-
-    def df_to_csv(self, df, path: str, **kwargs):
-        kwargs["storage_options"] = self.storage_options
-        df.to_csv(path, index=False, **kwargs)
-
-    def df_from_parquet(
-        self,
-        path: str,
-        return_as: Literal["pandas", "polars"] = "pandas",
-    ):
-        """Create DataFrame from parquet file in s3."""
-        df = pl.read_parquet(path, storage_options=self.storage_options)
-        if return_as == "pandas":
-            return df.to_pandas()
-        return df
-
-    def df_to_parquet(self, df, path: str, **kwargs):
-        kwargs["storage_options"] = self.storage_options
-        df.to_parquet(path, index=False, **kwargs)
-
     def bucket_and_partition(
         self, path: str, require_partition: bool = True
     ) -> Union[None, Tuple[str, str]]:
@@ -376,20 +314,10 @@ class S3:
     @cached_property
     def arrow_fs(self) -> "S3FileSystem":
         return S3FileSystem(
-            access_key=self.s3_params.aws_access_key_id,
-            secret_key=self.s3_params.aws_secret_access_key.get_secret_value(),
-            endpoint_override=self.s3_params.s3_endpoint_url.unicode_string(),
+            access_key=self.cfg.aws_access_key_id,
+            secret_key=self.cfg.aws_secret_access_key.get_secret_value(),
+            endpoint_override=self.cfg.s3_endpoint_url.unicode_string(),
         )
-
-    @cached_property
-    def storage_options(self):
-        return {
-            "key": self.s3_params.aws_access_key_id,
-            "secret": self.s3_params.aws_secret_access_key.get_secret_value(),
-            "client_kwargs": {
-                "endpoint_url": self.s3_params.s3_endpoint_url.unicode_string()
-            },
-        }
 
     @cached_property
     def resource(self):
@@ -415,8 +343,8 @@ class S3:
     def _boto3_obj(self, obj_type: Literal["resource", "client"]):
         return getattr(boto3, obj_type)(
             "s3",
-            endpoint_url=self.s3_params.s3_endpoint_url.unicode_string(),
-            aws_access_key_id=self.s3_params.aws_access_key_id,
-            aws_secret_access_key=self.s3_params.aws_secret_access_key.get_secret_value(),
+            endpoint_url=self.cfg.s3_endpoint_url.unicode_string(),
+            aws_access_key_id=self.cfg.aws_access_key_id,
+            aws_secret_access_key=self.cfg.aws_secret_access_key.get_secret_value(),
             config=Config(signature_version="s3v4"),
         )

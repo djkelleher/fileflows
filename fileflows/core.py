@@ -2,26 +2,18 @@ import os
 import shutil
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from typing import List, Optional, Union
+
+from pyarrow import parquet
 
 from .s3 import S3, S3Cfg, is_s3_path
-
-try:
-    import polars as pl
-except ImportError:
-    pass
-
-try:
-    from pyarrow import parquet
-except ImportError:
-    pass
 
 
 class Files:
     """File operations for local file system and/or s3 protocol object stores."""
 
     def __init__(self, s3_cfg: Optional[S3Cfg] = None) -> None:
-        self._s3_cfg = s3_cfg
+        self.s3_cfg = s3_cfg
 
     def create(self, location: Union[str, Path]):
         """Create a directory or bucket if it doesn't already exist."""
@@ -85,42 +77,9 @@ class Files:
             ).names
         )
 
-    def df_from_csv(
-        self,
-        path: str,
-        header: Union[bool, Sequence[str]],
-        dtypes: Dict[str, Any] = None,
-        return_as: Literal["pandas", "polars"] = "pandas",
-    ):
-        """Create DataFrame from CSV file in S3."""
-        if is_s3_path(path):
-            return self.s3.df_from_csv(path, header, dtypes, return_as)
-        df = pl.read_csv(
-            path,
-            dtypes=dtypes,
-            has_header=header is True,
-            columns=header if isinstance(header, (list, tuple)) else None,
-        )
-        if return_as == "pandas":
-            return df.to_pandas()
-        return df
-
-    def df_from_parquet(
-        self,
-        path: str,
-        return_as: Literal["pandas", "polars"] = "pandas",
-    ):
-        """Create DataFrame from parquet file in s3."""
-        if is_s3_path(path):
-            return self.s3.df_from_parquet(path, return_as)
-        df = pl.read_parquet(path)
-        if return_as == "pandas":
-            return df.to_pandas()
-        return df
-
     @cached_property
     def s3(self) -> S3:
-        return S3(self._s3_cfg)
+        return S3(self.s3_cfg)
 
     def _transfer(
         self,
