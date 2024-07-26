@@ -24,7 +24,7 @@ class S3Cfg(BaseSettings):
     s3_endpoint_url: AnyHttpUrl
     aws_access_key_id: str
     aws_secret_access_key: SecretStr
-    region: Optional[str] = None
+    s3_region: Optional[str] = None
 
 
 def is_s3_path(path: PathT) -> bool:
@@ -311,6 +311,19 @@ class S3:
             return bucket, partition
         return None, None
 
+    def is_file_path(self, path: str) -> bool:
+        """Return True if provided path is to a file."""
+        if file_extensions_re.search(path):
+            # path has a known file extension.
+            return True
+        bucket_name, partition = self.bucket_and_partition(path)
+        try:
+            # Check if the path is a file
+            self.client.head_object(Bucket=bucket_name, Key=partition)
+            return True
+        except self.client.exceptions.ClientError:
+            return False
+
     @cached_property
     def arrow_fs(self) -> "S3FileSystem":
         return S3FileSystem(
@@ -326,19 +339,6 @@ class S3:
     @cached_property
     def client(self):
         return self._boto3_obj("client")
-
-    def is_file_path(self, path: str) -> bool:
-        """Return True if provided path is to a file."""
-        if file_extensions_re.search(path):
-            # path has a known file extension.
-            return True
-        bucket_name, partition = self.bucket_and_partition(path)
-        try:
-            # Check if the path is a file
-            self.client.head_object(Bucket=bucket_name, Key=partition)
-            return True
-        except self.client.exceptions.ClientError:
-            return False
 
     def _boto3_obj(self, obj_type: Literal["resource", "client"]):
         return getattr(boto3, obj_type)(
