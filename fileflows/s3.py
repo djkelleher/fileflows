@@ -35,7 +35,7 @@ def is_s3_path(path: PathT) -> bool:
 class S3:
     """File operations for s3 protocol object stores."""
 
-    _bucket_and_partition_re = re.compile(r"s3:\/\/([-\w]+)(?:\/(.+))?")
+    _bucket_and_partition_re = re.compile(r"s3:\/\/([a-zA-Z0-9.\-_]{1,255})(?:\/(.+))?")
 
     def __init__(self, s3_cfg: Optional[S3Cfg] = None) -> None:
         self.cfg = s3_cfg or S3Cfg()
