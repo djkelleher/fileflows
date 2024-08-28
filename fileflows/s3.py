@@ -298,6 +298,20 @@ class S3:
             return [f.split("/")[-1] for f in files]
         raise ValueError(f"Invalid return format: {return_as}")
 
+    def list_files_paginated(self, bucket_name: str, prefix: Optional[str] = None):
+        """List all files in a bucket, yielding paginated lists of files.
+
+        Args:
+            bucket_name (str): Bucket to search in.
+            prefix (Optional[str], optional): File prefix to search for. Defaults to None.
+
+        Yields:
+            List[str]: File names
+        """
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            yield [obj["Key"] for obj in page["Contents"]]
+
     def bucket_and_partition(
         self, path: str, require_partition: bool = True
     ) -> Union[None, Tuple[str, str]]:
