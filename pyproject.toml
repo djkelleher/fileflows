@@ -18,7 +18,7 @@ dependencies = [
     "s3fs[boto3]",
     "pydantic>=2.0.0",
     "pydantic-settings",
-    "quicklogs",
+    "quicklogs>=2.0.0",
     "pyarrow",
 ]
 
