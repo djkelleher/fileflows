@@ -6,12 +6,14 @@ from pathlib import Path
 from typing import List, Literal, Optional, Sequence, Tuple, Union
 
 import boto3
+import duckdb
 from boto3.session import Config
 from botocore.exceptions import ClientError
 from pyarrow.fs import S3FileSystem
 from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
+from xxhash import xxh32
 
 from .utils import file_extensions_re, logger
 
@@ -30,6 +32,29 @@ class S3Cfg(BaseSettings):
 def is_s3_path(path: PathT) -> bool:
     """Returns True if `path` is an s3 path."""
     return str(path).startswith("s3://")
+
+
+def create_duckdb_secret(
+    s3_cfg: Optional[S3Cfg] = None, secret_name: Optional[str] = None
+):
+    s3_cfg = s3_cfg or S3Cfg()
+    http_re = re.compile(r"^https?://")
+    endpoint = s3_cfg.s3_endpoint_url.unicode_string()
+    secret = [
+        "TYPE S3",
+        f"KEY_ID '{s3_cfg.aws_access_key_id}'",
+        f"SECRET '{s3_cfg.aws_secret_access_key.get_secret_value()}'",
+        f"ENDPOINT '{http_re.sub('', endpoint).rstrip('/')}'",
+        f"USE_SSL {not endpoint.startswith('http://')}",
+    ]
+    if http_re.match(endpoint):
+        secret.append("URL_STYLE path")
+    if s3_cfg.s3_region:
+        secret.append(f"REGION '{s3_cfg.s3_region}'")
+    secret = ",".join(secret)
+    if secret_name is None:
+        secret_name = "a" + xxh32(secret.encode()).hexdigest()
+    duckdb.execute(f"CREATE SECRET IF NOT EXISTS {secret_name} ({secret});")
 
 
 class S3:
