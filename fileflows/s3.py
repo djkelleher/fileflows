@@ -9,6 +9,7 @@ import boto3
 import duckdb
 from boto3.session import Config
 from botocore.exceptions import ClientError
+from duckdb import DuckDBPyConnection
 from pyarrow.fs import S3FileSystem
 from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
@@ -35,9 +36,12 @@ def is_s3_path(path: PathT) -> bool:
 
 
 def create_duckdb_secret(
-    s3_cfg: Optional[S3Cfg] = None, secret_name: Optional[str] = None
+    s3_cfg: Optional[S3Cfg] = None,
+    secret_name: Optional[str] = None,
+    conn: Optional[DuckDBPyConnection] = None,
 ):
     s3_cfg = s3_cfg or S3Cfg()
+    conn = conn or duckdb
     http_re = re.compile(r"^https?://")
     endpoint = s3_cfg.s3_endpoint_url.unicode_string()
     secret = [
@@ -54,7 +58,7 @@ def create_duckdb_secret(
     secret = ",".join(secret)
     if secret_name is None:
         secret_name = "a" + xxh32(secret.encode()).hexdigest()
-    duckdb.execute(f"CREATE SECRET IF NOT EXISTS {secret_name} ({secret});")
+    conn.execute(f"CREATE SECRET IF NOT EXISTS {secret_name} ({secret});")
 
 
 class S3:
