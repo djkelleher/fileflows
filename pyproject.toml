@@ -20,6 +20,8 @@ dependencies = [
     "pydantic-settings",
     "quicklogs>=2.0.0",
     "pyarrow",
+    "duckdb",
+    "xxhash",
 ]
 
 [project.optional-dependencies]
