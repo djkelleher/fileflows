@@ -1,8 +1,69 @@
+import gzip
+import os
 import re
+import shutil
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+from multiprocessing import Pool
+from pathlib import Path
+from typing import List, Optional
 
+import duckdb
 from quicklogs import get_logger
 
 logger = get_logger("fileflows")
+
+def gzip_file(file: Path, suffix: str = ".csv.gz", delete: bool = True):
+    gz_file = file.with_suffix(suffix)
+    with open(file, "rb") as tf:
+        with gzip.open(gz_file, "wb") as gf:
+            shutil.copyfileobj(tf, gf)
+    logger.info("Saved file: %s", gz_file)
+    if delete:
+        file.unlink()
+
+
+def gzip_files(
+    files: List[Path], suffix: str = ".csv.gz", delete: bool = True, n_proc: int = 4
+):
+    with Pool(n_proc) as p:
+        p.map(partial(gzip_file, suffix=suffix, delete=delete), files)
+
+
+def csvs_to_parquet(files: Optional[List[Path]] = None):
+    """Convert CSV files to Parquet."""
+    # convert csv file to parquet.
+    if isinstance(files, Path) and files.is_dir():
+        files = list(files.glob("*.csv.gz"))
+    logger.info("Converting %i CSV files to Parquet: %s", len(files), files[:10])
+    if not files:
+        return
+    if len(files) == 1:
+        csv_to_parquet(files[0])
+    else:
+        max_workers = min(len(files), os.cpu_count())
+        with ProcessPoolExecutor(max_workers=max_workers) as pool:
+            results = pool.map(csv_to_parquet, files)
+        for result in results:
+            logger.info("File conversion result: %s", result)
+    # remove csv files
+    for file in files:
+        logger.info("Removing: %s", file)
+        os.remove(file)
+
+
+def csv_to_parquet(file: Path):
+    """Convert a CSV file to Parquet."""
+    stem = file.stem.split(".")[0]
+    save_path = file.with_name(f"{stem}.parquet")
+    if not save_path.exists():
+        logger.info("Converting %s -> %s", file, save_path)
+        duckdb.execute(
+            f"COPY (SELECT * FROM '{file}') TO '{save_path}' (FORMAT PARQUET);"
+        )
+    else:
+        logger.info("Skipping %s -> %s", file, save_path)
+
 
 
 file_extensions = [
