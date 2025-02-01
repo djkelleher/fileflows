@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Sequence
 
 import duckdb
 from quicklogs import get_logger
@@ -30,7 +30,12 @@ def gzip_files(
         p.map(partial(gzip_file, suffix=suffix, delete=delete), files)
 
 
-def csvs_to_parquet(files: Optional[List[Path]] = None):
+def with_parquet_extension(file: Path) -> Path:
+    """Return a file with a Parquet extension."""
+    stem = file.stem.split(".")[0]
+    return file.with_name(f"{stem}.parquet")
+
+def csvs_to_parquet(files: Path | Sequence[Path], header: bool, save_path_generator: Callable[[Path], Path] = with_parquet_extension):
     """Convert CSV files to Parquet."""
     # convert csv file to parquet.
     if isinstance(files, Path) and files.is_dir():
@@ -39,8 +44,9 @@ def csvs_to_parquet(files: Optional[List[Path]] = None):
     if not files:
         return
     if len(files) == 1:
-        csv_to_parquet(files[0])
+        csv_to_parquet(file=files[0], header=header, save_path_generator=save_path_generator)
     else:
+        csv_to_parquet = partial(csv_to_parquet, header=header, save_path_generator=save_path_generator)
         max_workers = min(len(files), os.cpu_count())
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
             results = pool.map(csv_to_parquet, files)
@@ -51,19 +57,18 @@ def csvs_to_parquet(files: Optional[List[Path]] = None):
         logger.info("Removing: %s", file)
         os.remove(file)
 
-
-def csv_to_parquet(file: Path):
+def csv_to_parquet(file: Path, header: bool, save_path_generator: Callable[[Path], Path] = with_parquet_extension):
     """Convert a CSV file to Parquet."""
-    stem = file.stem.split(".")[0]
-    save_path = file.with_name(f"{stem}.parquet")
+    save_path = save_path_generator(file)
     if not save_path.exists():
         logger.info("Converting %s -> %s", file, save_path)
-        duckdb.execute(
-            f"COPY (SELECT * FROM '{file}') TO '{save_path}' (FORMAT PARQUET);"
-        )
+        stmt = f"COPY (SELECT * FROM '{file}') TO '{save_path}' (FORMAT PARQUET"
+        if header:
+            stmt += ", WITH HEADER=TRUE"
+        stmt += ");"
+        duckdb.execute(stmt)
     else:
         logger.info("Skipping %s -> %s", file, save_path)
-
 
 
 file_extensions = [
