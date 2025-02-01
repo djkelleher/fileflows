@@ -7,6 +7,7 @@ from typing import List, Literal, Optional, Sequence, Tuple, Union
 
 import boto3
 import duckdb
+import pandas as pd
 from boto3.session import Config
 from botocore.exceptions import ClientError
 from duckdb import DuckDBPyConnection
@@ -152,6 +153,18 @@ class S3:
         """
         for file in tqdm(self.list_files(bucket_name, partition, return_as="urls")):
             self.download_file(file, save_dir, overwrite)
+
+    def df_from_files(self, files: Sequence[str]) -> pd.DataFrame:
+        if isinstance(files, str):
+            files = [files]
+        with duckdb.connect() as con:
+            create_duckdb_secret(
+                s3_cfg=self.cfg,
+                conn=con,
+            )
+            files = ",".join([f"'{f}'" for f in files])
+            df = con.execute(f"""SELECT * FROM read_parquet({files})""").df()
+        return df
 
     def delete_file(self, file: str, if_exists: bool = False):
         """Delete a file from s3.
