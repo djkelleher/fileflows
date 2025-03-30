@@ -42,7 +42,6 @@ def create_duckdb_secret(
 ):
     s3_cfg = s3_cfg or S3Cfg()
     conn = conn or duckdb
-    http_re = re.compile(r"^https?://")
     secret = [
         "TYPE S3",
         f"KEY_ID '{s3_cfg.aws_access_key_id}'",
@@ -50,17 +49,18 @@ def create_duckdb_secret(
     ]
     if s3_cfg.s3_endpoint_url is not None:
         endpoint = s3_cfg.s3_endpoint_url.unicode_string()
+        http_re = r"^https?://"
         secret += [
-            f"ENDPOINT '{http_re.sub('', endpoint).rstrip('/')}'",
+            f"ENDPOINT '{re.sub(http_re, '', endpoint).rstrip('/')}'",
             f"USE_SSL {not endpoint.startswith('http://')}"
         ]
-    if http_re.match(endpoint):
-        secret.append("URL_STYLE path")
+        if re.match(http_re, endpoint):
+            secret.append("URL_STYLE path")
     if s3_cfg.s3_region:
         secret.append(f"REGION '{s3_cfg.s3_region}'")
     secret = ",".join(secret)
     if secret_name is None:
-        secret_name = "a" + xxh32(secret.encode()).hexdigest()
+        secret_name = "fileflows" + xxh32(secret.encode()).hexdigest()
     conn.execute(f"CREATE SECRET IF NOT EXISTS {secret_name} ({secret});")
 
 
@@ -131,7 +131,6 @@ class S3:
         local_path.parent.mkdir(exist_ok=True, parents=True)
 
         if overwrite or not local_path.exists():
-            logger.info("Downloading %s to %s", s3_path, local_path)
             bucket, partition = self.bucket_and_partition(s3_path)
             with local_path.open(mode="wb+") as f:
                 self.client.download_fileobj(bucket, partition, f)
@@ -296,6 +295,7 @@ class S3:
         bucket = self.resource.Bucket(bucket_name)
         if not bucket.creation_date:
             try:
+                logger.info("Creating new bucket: %s", bucket_name)
                 bucket.create()
             except ClientError as err:
                 if err.response["Error"]["Code"] != "BucketAlreadyOwnedByYou":
