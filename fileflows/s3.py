@@ -12,7 +12,7 @@ from boto3.session import Config
 from botocore.exceptions import ClientError
 from duckdb import DuckDBPyConnection
 from pyarrow.fs import S3FileSystem
-from pydantic import AnyHttpUrl, SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
 from tqdm import tqdm
 from xxhash import xxh32
@@ -21,14 +21,23 @@ from .utils import file_extensions_re, logger
 
 PathT = Union[str, Path]
 
+http_re = re.compile(r"^https?://")
 
 class S3Cfg(BaseSettings):
     """S3 configuration. Variables will be loaded from environment variables if set."""
     aws_access_key_id: str
     aws_secret_access_key: SecretStr
     s3_region: Optional[str] = None
-    s3_endpoint_url: Optional[AnyHttpUrl] = None
+    s3_endpoint_url: Optional[str] = None
+    # AWS One Zone Availability Zone suffix. e.g. --use1-az6--x-s3
+    aws_zone_bucket_suffix: Optional[str] = None # not yet supported with boto3
 
+    @field_validator('s3_endpoint_url')
+    @classmethod
+    def ensure_url_has_scheme(cls, v: Optional[str]) -> Optional[str]:
+        if v and not http_re.match(v):
+            return f'https://{v}'
+        return v
 
 def is_s3_path(path: PathT) -> bool:
     """Returns True if `path` is an s3 path."""
@@ -48,13 +57,10 @@ def create_duckdb_secret(
         f"SECRET '{s3_cfg.aws_secret_access_key.get_secret_value()}'",
     ]
     if s3_cfg.s3_endpoint_url is not None:
-        endpoint = s3_cfg.s3_endpoint_url.unicode_string()
-        http_re = r"^https?://"
         secret += [
-            f"ENDPOINT '{re.sub(http_re, '', endpoint).rstrip('/')}'",
-            f"USE_SSL {not endpoint.startswith('http://')}"
+            f"ENDPOINT '{http_re.sub('', s3_cfg.s3_endpoint_url).rstrip('/')}'"
         ]
-        if re.match(http_re, endpoint):
+        if http_re.match(s3_cfg.s3_endpoint_url):
             secret.append("URL_STYLE path")
     if s3_cfg.s3_region:
         secret.append(f"REGION '{s3_cfg.s3_region}'")
@@ -291,12 +297,35 @@ class S3:
 
     def get_bucket(self, bucket_name: str) -> "Bucket":
         """Get a bucket object for `bucket_name`. If bucket does not exist, create it."""
+        if 's3express-' in self.cfg.s3_endpoint_url:
+            logger.warning(
+                "AWS One Zone buckets are not supported. Can not get bucket. If bucket '%s' needs to be created, please create it manually via the AWS console or CLI.",
+                bucket_name,
+            )
+            return
         bucket_name = re.sub(r"^s3:\/\/", "", bucket_name)
         bucket = self.resource.Bucket(bucket_name)
         if not bucket.creation_date:
             try:
                 logger.info("Creating new bucket: %s", bucket_name)
-                bucket.create()
+                CreateBucketConfiguration = {}
+                if self.cfg.s3_region:
+                    CreateBucketConfiguration['LocationConstraint'] = self.cfg.s3_region
+                """
+                if self.cfg.aws_zone_bucket_suffix.endswith('--x-s3'):
+                    CreateBucketConfiguration['Location'] = {
+                        'Type': 'AvailabilityZone',
+                        'Name': 'use1-az6'
+                    }
+                    CreateBucketConfiguration['Bucket'] = {
+                        'DataRedundancy': 'SingleAvailabilityZone',
+                        'Type': 'Directory'
+                    }
+                """
+                if CreateBucketConfiguration:
+                    bucket.create_bucket(CreateBucketConfiguration=CreateBucketConfiguration)
+                else:
+                    bucket.create()
             except ClientError as err:
                 if err.response["Error"]["Code"] != "BucketAlreadyOwnedByYou":
                     raise err
@@ -384,11 +413,13 @@ class S3:
 
     @cached_property
     def arrow_fs(self) -> "S3FileSystem":
-        return S3FileSystem(
-            access_key=self.cfg.aws_access_key_id,
-            secret_key=self.cfg.aws_secret_access_key.get_secret_value(),
-            endpoint_override=self.cfg.s3_endpoint_url.unicode_string(),
+        kwargs = dict(
+            aws_access_key_id=self.cfg.aws_access_key_id,
+            aws_secret_access_key=self.cfg.aws_secret_access_key.get_secret_value(),
         )
+        if self.cfg.s3_endpoint_url:
+            kwargs["endpoint_url"] = self.cfg.s3_endpoint_url
+        return S3FileSystem(**kwargs)
 
     @cached_property
     def resource(self):
@@ -399,10 +430,13 @@ class S3:
         return self._boto3_obj("client")
 
     def _boto3_obj(self, obj_type: Literal["resource", "client"]):
-        return getattr(boto3, obj_type)(
-            "s3",
-            endpoint_url=self.cfg.s3_endpoint_url.unicode_string(),
+        kwargs = dict(
             aws_access_key_id=self.cfg.aws_access_key_id,
             aws_secret_access_key=self.cfg.aws_secret_access_key.get_secret_value(),
             config=Config(signature_version="s3v4"),
         )
+        if self.cfg.s3_endpoint_url:
+            kwargs["endpoint_url"] = self.cfg.s3_endpoint_url
+        if self.cfg.s3_region:
+            kwargs["region_name"] = self.cfg.s3_region
+        return getattr(boto3, obj_type)("s3",**kwargs)
